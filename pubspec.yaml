@@ -1,0 +1,5 @@
+name: ls
+version: 0.0.1
+description: A Dart reproduction of the ls command line utility (for learning purposes)
+dependencies:
+  args: 
