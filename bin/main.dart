@@ -9,7 +9,9 @@ import 'replay_stream.dart';
 
 void main(List<String> args) {
   exitCode = 0;
-  final parser = new ArgParser();
+  final parser = new ArgParser()
+      ..addFlag('a', abbr: 'a')
+      ..addFlag('A', abbr: 'A');
 
   //TODO: figure out what to do if terminalColumns is resized
   var consoleWidthInChars = stdout.terminalColumns;
@@ -31,20 +33,31 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
   if (await dir.exists()) {
     var dirEntities = dir.list();
     var dorEntitiesList = await dirEntities.toList();
-    //TODO: if -a is used, add '.' and '..' if not in root
-    writeTabulatedEntities(dorEntitiesList, consoleWidthInChars);
+
+    if (!parsedArgs['A'] && parsedArgs['a']) {
+      dorEntitiesList.insert(0, dir); //TODO: figure out how, for specified directories, to get their representation as a '.'
+      if (dir.parent != dir) {
+      	dorEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
+      }
+    }
+    //TODO: alphabetize list, ignoring the '.', though . and .. come first
+
+    //TODO: support list prints
+    writeTabulatedEntities(dorEntitiesList, consoleWidthInChars, parsedArgs['A'] || parsedArgs['a']);
   } else {
     stderr.writeln('ls: cannot access ${dir.path}: No such file or directory');
   }
 }
 
-void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars) {
+void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   var wroteNewline = false;
   var columnIndex = 0;
-  var columnWidths = calculateColumnWidths(dirEntities, consoleWidthInChars);
+  var columnWidths = calculateColumnWidths(dirEntities, consoleWidthInChars, allowDotNames);
+
+  //TODO: write in column format (see notes for example)
 
   for (FileSystemEntity entity in dirEntities) {
-    var entityName = getFileSystemEntitiyName(entity);
+    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
       wroteNewline = false;
@@ -68,7 +81,7 @@ void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidth
   }
 }
 
-String getFileSystemEntitiyName(FileSystemEntity entity) {
+String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
   var entitySegments = entity.uri.pathSegments;
 
   var entityName = entitySegments.last;
@@ -78,7 +91,7 @@ String getFileSystemEntitiyName(FileSystemEntity entity) {
 
   // Shortcut for later usage in writeTabulatedEntities
   if (entityName.isNotEmpty) {
-    if (entityName[0] == '.') {
+    if (!allowDotNames && entityName[0] == '.') {
       return '';
     }
   }
@@ -86,12 +99,12 @@ String getFileSystemEntitiyName(FileSystemEntity entity) {
   return entityName;
 }
 
-List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleWidthInChars) {
+List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   var totalLength = 0;
   var columns = new List<int>();
 
   for (FileSystemEntity entity in dirEntities) {
-    var entityName = getFileSystemEntitiyName(entity);
+    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
       var entityLength = entityName.length;
@@ -104,7 +117,7 @@ List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleW
       columns.add(entityLength + space);
       totalLength += entityLength + space;
 
-      //TODO: for every element, figure out the optimal column width
+      //TODO: for every element, figure out the optimal column width (probably want to write a function to "write" the list, this way the column-wise formatting code doesn't need to be written twice)
     }
   }
 
