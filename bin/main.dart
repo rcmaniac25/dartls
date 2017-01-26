@@ -11,7 +11,9 @@ void main(List<String> args) {
   exitCode = 0;
   final parser = new ArgParser()
       ..addFlag('a', abbr: 'a')
-      ..addFlag('A', abbr: 'A');
+      ..addFlag('A', abbr: 'A')
+      ..addFlag('l', abbr: 'l');
+  //TODO: need some better way to handle these options as "args" doesn't allow naming something without using it as an argument (AKA: the name 'a' can be used --a or -a when it should ONLY be -a, and is referenced 'a')
 
   //TODO: figure out what to do if terminalColumns is resized
   var consoleWidthInChars = stdout.terminalColumns;
@@ -42,12 +44,51 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
     }
     //TODO: alphabetize list, ignoring the '.', though . and .. come first
 
-    //TODO: support list prints
-    writeTabulatedEntities(dorEntitiesList, consoleWidthInChars, parsedArgs['A'] || parsedArgs['a']);
+    var allowDotNames = parsedArgs['A'] || parsedArgs['a'];
+    if (parsedArgs['l']) {
+      writeLongFormEntities(dorEntitiesList, consoleWidthInChars, allowDotNames);
+    } else {
+      writeTabulatedEntities(dorEntitiesList, consoleWidthInChars, allowDotNames);
+    }
   } else {
     stderr.writeln('ls: cannot access ${dir.path}: No such file or directory');
   }
 }
+
+// ------- Utility -------
+
+String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
+  var entitySegments = entity.uri.pathSegments;
+
+  var entityName = entitySegments.last;
+  if (entityName.isEmpty) {
+    entityName = entitySegments[entitySegments.length - 2]; // Get the second-to-last
+  }
+
+  // Shortcut for later usage in when printing (we skip empty entries, if this is a dot name (.git), then we can just skip it)
+  if (entityName.isNotEmpty) {
+    if (!allowDotNames && entityName[0] == '.') {
+      return '';
+    }
+  }
+
+  return entityName;
+}
+
+// ----- Long Format -----
+
+void writeLongFormEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
+  //TODO: need to actually implement
+  for (FileSystemEntity entity in dirEntities) {
+  	var entityName = getFileSystemEntitiyName(entity, allowDotNames);
+
+  	if (entityName.isNotEmpty) {
+  	  stdout.writeln(entityName);
+  	}
+  }
+}
+
+// ------ Tabulated ------
 
 void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   var wroteNewline = false;
@@ -79,24 +120,6 @@ void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidth
   if (!wroteNewline) {
   	stdout.writeln();
   }
-}
-
-String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
-  var entitySegments = entity.uri.pathSegments;
-
-  var entityName = entitySegments.last;
-  if (entityName.isEmpty) {
-    entityName = entitySegments[entitySegments.length - 2]; // Get the second-to-last
-  }
-
-  // Shortcut for later usage in writeTabulatedEntities
-  if (entityName.isNotEmpty) {
-    if (!allowDotNames && entityName[0] == '.') {
-      return '';
-    }
-  }
-
-  return entityName;
 }
 
 List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
