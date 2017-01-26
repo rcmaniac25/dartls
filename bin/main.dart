@@ -39,7 +39,7 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
     if (!parsedArgs['A'] && parsedArgs['a']) {
       dorEntitiesList.insert(0, dir); //TODO: figure out how, for specified directories, to get their representation as a '.'
       if (dir.parent != dir) {
-      	dorEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
+        dorEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
       }
     }
     //TODO: alphabetize list, ignoring the '.', though . and .. come first
@@ -80,11 +80,11 @@ String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
 void writeLongFormEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   //TODO: need to actually implement
   for (FileSystemEntity entity in dirEntities) {
-  	var entityName = getFileSystemEntitiyName(entity, allowDotNames);
+    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
-  	if (entityName.isNotEmpty) {
-  	  stdout.writeln(entityName);
-  	}
+    if (entityName.isNotEmpty) {
+      stdout.writeln(entityName);
+    }
   }
 }
 
@@ -110,15 +110,15 @@ void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidth
       stdout.write("${entityName}${paddingString}");
 
       if (columnIndex == columnWidths.length) {
-      	stdout.writeln();
-      	wroteNewline = true;
-      	columnIndex = 0;
+        stdout.writeln();
+        wroteNewline = true;
+        columnIndex = 0;
       }
     }
   }
 
   if (!wroteNewline) {
-  	stdout.writeln();
+    stdout.writeln();
   }
 }
 
@@ -132,7 +132,7 @@ List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleW
     if (entityName.isNotEmpty) {
       var entityLength = entityName.length;
       if (totalLength + entityLength > consoleWidthInChars) {
-      	break;
+        break;
       }
 
       // Space between chars unless it will make the padded string wrap to the next line
@@ -145,7 +145,7 @@ List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleW
   }
 
   if (columns.isEmpty) {
-  	columns.add(consoleWidthInChars);
+    columns.add(consoleWidthInChars);
   }
 
   return columns;
