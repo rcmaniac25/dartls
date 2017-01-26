@@ -31,6 +31,7 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
   if (await dir.exists()) {
     var dirEntities = dir.list();
     var dorEntitiesList = await dirEntities.toList();
+    //TODO: if -a is used, add '.' and '..' if not in root
     writeTabulatedEntities(dorEntitiesList, consoleWidthInChars);
   } else {
     stderr.writeln('ls: cannot access ${dir.path}: No such file or directory');
@@ -38,18 +39,33 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
 }
 
 void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars) {
-  var valuesWritten = false;
-  var columnWiths = calculateColumnWidths(dirEntities, consoleWidthInChars);
+  var wroteNewline = false;
+  var columnIndex = 0;
+  var columnWidths = calculateColumnWidths(dirEntities, consoleWidthInChars);
+
   for (FileSystemEntity entity in dirEntities) {
     var entityName = getFileSystemEntitiyName(entity);
 
-    //TODO: write each name to the column length
     if (entityName.isNotEmpty) {
-      stdout.write("${entityName}${valuesWritten ? ' ' : ''}");
-      valuesWritten = true;
+      wroteNewline = false;
+
+      var paddingLength = columnWidths[columnIndex++] - entityName.length;
+      var paddingCodes = new List<int>.filled(paddingLength.clamp(0, consoleWidthInChars), 0x20);
+      var paddingString = new String.fromCharCodes(paddingCodes);
+
+      stdout.write("${entityName}${paddingString}");
+
+      if (columnIndex == columnWidths.length) {
+      	stdout.writeln();
+      	wroteNewline = true;
+      	columnIndex = 0;
+      }
     }
   }
-  stdout.writeln();
+
+  if (!wroteNewline) {
+  	stdout.writeln();
+  }
 }
 
 String getFileSystemEntitiyName(FileSystemEntity entity) {
@@ -60,7 +76,7 @@ String getFileSystemEntitiyName(FileSystemEntity entity) {
     entityName = entitySegments[entitySegments.length - 2]; // Get the second-to-last
   }
 
-  // Shortcut for later usage
+  // Shortcut for later usage in writeTabulatedEntities
   if (entityName.isNotEmpty) {
     if (entityName[0] == '.') {
       return '';
@@ -73,13 +89,28 @@ String getFileSystemEntitiyName(FileSystemEntity entity) {
 List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleWidthInChars) {
   var totalLength = 0;
   var columns = new List<int>();
+
   for (FileSystemEntity entity in dirEntities) {
     var entityName = getFileSystemEntitiyName(entity);
 
     if (entityName.isNotEmpty) {
-      //TODO: v1: for one full row, figure out the lengths to use
-      //TODO: v2: for every element, figure out the row length
+      var entityLength = entityName.length;
+      if (totalLength + entityLength > consoleWidthInChars) {
+      	break;
+      }
+
+      // Space between chars unless it will make the padded string wrap to the next line
+      var space = (totalLength + entityLength + 1) > consoleWidthInChars ? 0 : 1;
+      columns.add(entityLength + space);
+      totalLength += entityLength + space;
+
+      //TODO: for every element, figure out the optimal column width
     }
   }
+
+  if (columns.isEmpty) {
+  	columns.add(consoleWidthInChars);
+  }
+
   return columns;
 }
