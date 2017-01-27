@@ -4,6 +4,9 @@ import 'package:args/args.dart';
 
 import 'replay_stream.dart';
 
+const int DATA_SIZE_BYTES = 1;
+const int DATA_SIZE_HUMAN = 2;
+
 // Initial structure at this point based off https://www.dartlang.org/tutorials/dart-vm/cmdline
 // While 'ls' was chosen prior to looking at docs, a "dumb" version is defined https://www.dartlang.org/guides/libraries/library-tour#dartio---io-for-command-line-apps (Listing files in a directory)
 
@@ -12,7 +15,8 @@ void main(List<String> args) {
   final parser = new ArgParser()
       ..addFlag('a', abbr: 'a')
       ..addFlag('A', abbr: 'A')
-      ..addFlag('l', abbr: 'l');
+      ..addFlag('l', abbr: 'l')
+      ..addFlag('h', abbr: 'h');
   //TODO: need some better way to handle these options as "args" doesn't allow naming something without using it as an argument (AKA: the name 'a' can be used --a or -a when it should ONLY be -a, and is referenced 'a')
 
   //TODO: figure out what to do if terminalColumns is resized
@@ -46,7 +50,11 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
 
     var allowDotNames = parsedArgs['A'] || parsedArgs['a'];
     if (parsedArgs['l']) {
-      writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames);
+      var dataSizeType = DATA_SIZE_BYTES;
+      if (parsedArgs['h']) {
+      	dataSizeType = DATA_SIZE_HUMAN;
+      }
+      writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames, dataSizeType);
     } else {
       writeTabulatedEntities(dirEntitiesList, consoleWidthInChars, allowDotNames);
     }
@@ -75,11 +83,35 @@ String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
   return entityName;
 }
 
-Future<String> printDataSize(FileSystemEntity entity) async {
+Future<String> printDataSize(FileSystemEntity entity, int type) async {
   var stat = await entity.stat();
+  return printDataSizeFromEntity(stat, type);
+}
 
-  //TODO: support other formats
-  return stat.size.toString();
+Future<String> printDataSizeFromEntity(FileStat stat, int type) {
+  if (type == DATA_SIZE_HUMAN) {
+  	//TODO: needs tweaking. I'm getting exponent notation...
+  	var size = stat.size;
+  	if (size < 1024) {
+  	  return size.toString();
+  	}
+  	size /= 1024;
+  	if (size < 1024) {
+  	  return '${size.toStringAsPrecision(2)}K';
+  	}
+  	size /= 1024;
+  	if (size < 1024) {
+  	  return '${size.toStringAsPrecision(1)}M';
+  	}
+  	size /= 1024;
+  	if (size < 1024) {
+  	  return '${size.toStringAsPrecision(1)}G';
+  	}
+  	size /= 1024;
+  	return '${size.toStringAsPrecision(1)}T';
+  } else {
+  	return stat.size.toString();
+  }
 }
 
 String getEntityTypeString(FileSystemEntity entity) {
@@ -121,8 +153,8 @@ String leftPadString(String value, int columnWidth, int maxWidth) { //XXX Is tha
 
 // ----- Long Format -----
 
-void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) async {
-  stdout.writeln('total ${await printDataSize(dir)}');
+void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames, int dataSizeType) async {
+  stdout.writeln('total ${await printDataSize(dir, dataSizeType)}');
 
   //Need to calculate column widths
   var linkColumn = 0;
@@ -168,7 +200,7 @@ void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, nu
       stdout.write('${leftPadString(linkCount.toString(), linkColumn, consoleWidthInChars)} '); //Link count
       //TODO: owner
       //TODO: group
-      stdout.write('${leftPadString(entityStat.size.toString(), sizeColumn, consoleWidthInChars)} '); //Size
+      stdout.write('${leftPadString(printDataSizeFromEntity(entityStat, dataSizeType), sizeColumn, consoleWidthInChars)} '); //Size
       //TODO: date and time
       stdout.writeln(entityName);
     }
