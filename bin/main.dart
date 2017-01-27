@@ -34,21 +34,21 @@ void main(List<String> args) {
 Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleWidthInChars) async {
   if (await dir.exists()) {
     var dirEntities = dir.list();
-    var dorEntitiesList = await dirEntities.toList();
+    var dirEntitiesList = await dirEntities.toList();
 
     if (!parsedArgs['A'] && parsedArgs['a']) {
-      dorEntitiesList.insert(0, dir); //TODO: figure out how, for specified directories, to get their representation as a '.'
+      dirEntitiesList.insert(0, dir); //TODO: figure out how, for specified directories, to get their representation as a '.'
       if (dir.parent != dir) {
-        dorEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
+        dirEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
       }
     }
     //TODO: alphabetize list, ignoring the '.', though . and .. come first
 
     var allowDotNames = parsedArgs['A'] || parsedArgs['a'];
     if (parsedArgs['l']) {
-      writeLongFormEntities(dorEntitiesList, consoleWidthInChars, allowDotNames);
+      writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames);
     } else {
-      writeTabulatedEntities(dorEntitiesList, consoleWidthInChars, allowDotNames);
+      writeTabulatedEntities(dirEntitiesList, consoleWidthInChars, allowDotNames);
     }
   } else {
     stderr.writeln('ls: cannot access ${dir.path}: No such file or directory');
@@ -75,14 +75,101 @@ String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
   return entityName;
 }
 
+Future<String> printDataSize(FileSystemEntity entity) async {
+  var stat = await entity.stat();
+
+  //TODO: support other formats
+  return stat.size.toString();
+}
+
+String getEntityTypeString(FileSystemEntity entity) {
+  if (entity is Directory) {
+  	return 'd';
+  } else {
+  	return '-';
+  }
+}
+
+Future<int> entitiesInDirectory(Directory dir, bool allowDotNames) async {
+  var dirEntities = dir.list();
+
+  var count = 0;
+  await for (FileSystemEntity entity in dirEntities) {
+  	var entityName = getFileSystemEntitiyName(entity, allowDotNames);
+
+    if (entityName.isNotEmpty) {
+      count++;
+  	}
+  }
+
+  return count;
+}
+
+String createStringPadding(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
+  var paddingLength = columnWidth - value.length;
+  var paddingCodes = new List<int>.filled(paddingLength.clamp(0, maxWidth), 0x20);
+  return new String.fromCharCodes(paddingCodes);
+}
+
+String rightPadString(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
+  return '${value}${createStringPadding(value, columnWidth, maxWidth)}';
+}
+
+String leftPadString(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
+  return '${createStringPadding(value, columnWidth, maxWidth)}${value}';
+}
+
 // ----- Long Format -----
 
-void writeLongFormEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
-  //TODO: need to actually implement
+void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) async {
+  stdout.writeln('total ${await printDataSize(dir)}');
+
+  //Need to calculate column widths
+  var linkColumn = 0;
+  var sizeColumn = 0;
   for (FileSystemEntity entity in dirEntities) {
     var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
+      var entityStat = await entity.stat();
+
+      if (entity is Directory) {
+      	var entityCount = await entitiesInDirectory(entity as Directory, allowDotNames);
+      	var entityCountWidth = entityCount.toString().length;
+      	if (entityCountWidth > linkColumn) {
+	      linkColumn = entityCountWidth;
+	    }
+      } else if (linkColumn == 0) {
+      	linkColumn = 1;
+      }
+
+      var sizeWidth = entityStat.size.toString().length;
+      if (sizeWidth > sizeColumn) {
+      	sizeColumn = sizeWidth;
+      }
+    }
+  }
+
+  // Write actual file strings
+  for (FileSystemEntity entity in dirEntities) {
+    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
+
+    if (entityName.isNotEmpty) {
+      var entityStat = await entity.stat();
+
+      var linkCount = 0;
+      if (entity is Directory) {
+      	linkCount = await entitiesInDirectory(entity as Directory, allowDotNames);
+      } else {
+      	linkCount = 1;
+      }
+
+      stdout.write('${getEntityTypeString(entity)}${entityStat.modeString()}. '); //Permissions //TODO: the '.' at the end can mean something. Docs don't say very well
+      stdout.write('${leftPadString(linkCount.toString(), linkColumn, consoleWidthInChars)} '); //Link count
+      //TODO: owner
+      //TODO: group
+      stdout.write('${leftPadString(entityStat.size.toString(), sizeColumn, consoleWidthInChars)} '); //Size
+      //TODO: date and time
       stdout.writeln(entityName);
     }
   }
@@ -90,6 +177,7 @@ void writeLongFormEntities(List<FileSystemEntity> dirEntities, num consoleWidthI
 
 // ------ Tabulated ------
 
+//TODO: suddenly, this no longer appears to be writing in columns?
 void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   var wroteNewline = false;
   var columnIndex = 0;
@@ -103,11 +191,8 @@ void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidth
     if (entityName.isNotEmpty) {
       wroteNewline = false;
 
-      var paddingLength = columnWidths[columnIndex++] - entityName.length;
-      var paddingCodes = new List<int>.filled(paddingLength.clamp(0, consoleWidthInChars), 0x20);
-      var paddingString = new String.fromCharCodes(paddingCodes);
-
-      stdout.write("${entityName}${paddingString}");
+      var paddedEntity = rightPadString(entityName, columnWidths[columnIndex++], consoleWidthInChars);
+      stdout.write(paddedEntity);
 
       if (columnIndex == columnWidths.length) {
         stdout.writeln();
