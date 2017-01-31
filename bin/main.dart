@@ -4,8 +4,10 @@ import 'package:args/args.dart';
 
 import 'replay_stream.dart';
 
-const int DATA_SIZE_BYTES = 1;
-const int DATA_SIZE_HUMAN = 2;
+const int _dataSizeBytes = 1;
+const int _dataSizeHuman = 2;
+
+const _monthStrings = const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Initial structure at this point based off https://www.dartlang.org/tutorials/dart-vm/cmdline
 // While 'ls' was chosen prior to looking at docs, a "dumb" version is defined https://www.dartlang.org/guides/libraries/library-tour#dartio---io-for-command-line-apps (Listing files in a directory)
@@ -50,9 +52,9 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
 
     var allowDotNames = parsedArgs['A'] || parsedArgs['a'];
     if (parsedArgs['l']) {
-      var dataSizeType = DATA_SIZE_BYTES;
+      var dataSizeType = _dataSizeBytes;
       if (parsedArgs['h']) {
-      	dataSizeType = DATA_SIZE_HUMAN;
+        dataSizeType = _dataSizeHuman;
       }
       writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames, dataSizeType);
     } else {
@@ -85,40 +87,39 @@ String getFileSystemEntitiyName(FileSystemEntity entity, bool allowDotNames) {
 
 Future<String> printDataSize(FileSystemEntity entity, int type) async {
   var stat = await entity.stat();
-  return printDataSizeFromEntity(stat, type);
+  return printDataSizeFromEntity(stat.size, type);
 }
 
-Future<String> printDataSizeFromEntity(FileStat stat, int type) {
-  if (type == DATA_SIZE_HUMAN) {
-  	//TODO: needs tweaking. I'm getting exponent notation...
-  	var size = stat.size;
-  	if (size < 1024) {
-  	  return size.toString();
-  	}
-  	size /= 1024;
-  	if (size < 1024) {
-  	  return '${size.toStringAsPrecision(2)}K';
-  	}
-  	size /= 1024;
-  	if (size < 1024) {
-  	  return '${size.toStringAsPrecision(1)}M';
-  	}
-  	size /= 1024;
-  	if (size < 1024) {
-  	  return '${size.toStringAsPrecision(1)}G';
-  	}
-  	size /= 1024;
-  	return '${size.toStringAsPrecision(1)}T';
+String printDataSizeFromEntity(int size, int type) {
+  if (type == _dataSizeHuman) {
+    //TODO: needs tweaking. I'm getting exponent notation...
+    if (size < 1024) {
+      return size.toString();
+    }
+    size /= 1024;
+    if (size < 1024) {
+      return '${size.toStringAsPrecision(2)}K';
+    }
+    size /= 1024;
+    if (size < 1024) {
+      return '${size.toStringAsPrecision(1)}M';
+    }
+    size /= 1024;
+    if (size < 1024) {
+      return '${size.toStringAsPrecision(1)}G';
+    }
+    size /= 1024;
+    return '${size.toStringAsPrecision(1)}T';
   } else {
-  	return stat.size.toString();
+    return size.toString();
   }
 }
 
 String getEntityTypeString(FileSystemEntity entity) {
   if (entity is Directory) {
-  	return 'd';
+    return 'd';
   } else {
-  	return '-';
+    return '-';
   }
 }
 
@@ -127,28 +128,48 @@ Future<int> entitiesInDirectory(Directory dir, bool allowDotNames) async {
 
   var count = 0;
   await for (FileSystemEntity entity in dirEntities) {
-  	var entityName = getFileSystemEntitiyName(entity, allowDotNames);
+    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
       count++;
-  	}
+    }
   }
 
   return count;
 }
 
-String createStringPadding(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
+String createStringPadding(String value, int columnWidth, int maxWidth, {int paddingChar = 0x20}) { //XXX Is that max width?
   var paddingLength = columnWidth - value.length;
-  var paddingCodes = new List<int>.filled(paddingLength.clamp(0, maxWidth), 0x20);
+  var paddingCodes = new List<int>.filled(paddingLength.clamp(0, maxWidth), paddingChar);
   return new String.fromCharCodes(paddingCodes);
 }
 
-String rightPadString(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
-  return '${value}${createStringPadding(value, columnWidth, maxWidth)}';
+String rightPadString(String value, int columnWidth, int maxWidth, {int paddingChar = 0x20}) { //XXX Is that max width?
+  return '${value}${createStringPadding(value, columnWidth, maxWidth, paddingChar:paddingChar)}';
 }
 
-String leftPadString(String value, int columnWidth, int maxWidth) { //XXX Is that max width?
-  return '${createStringPadding(value, columnWidth, maxWidth)}${value}';
+String leftPadString(String value, int columnWidth, int maxWidth, {int paddingChar = 0x20}) { //XXX Is that max width?
+  return '${createStringPadding(value, columnWidth, maxWidth, paddingChar:paddingChar)}${value}';
+}
+
+DateTime subtractMonths(DateTime dateTime, int months) {
+  final weekDuration = new Duration(days: 7);
+
+  var desiredMonth = dateTime.month - months;
+  if (desiredMonth < 1) {
+    desiredMonth += 12;
+  }
+
+  //XXX: this is not going to produce proper dates
+  while (dateTime.month != desiredMonth) {
+    // One month of subtractions
+    dateTime = dateTime.subtract(weekDuration)
+        ..subtract(weekDuration)
+        ..subtract(weekDuration)
+        ..subtract(weekDuration);
+  }
+
+  return dateTime;
 }
 
 // ----- Long Format -----
@@ -156,54 +177,79 @@ String leftPadString(String value, int columnWidth, int maxWidth) { //XXX Is tha
 void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames, int dataSizeType) async {
   stdout.writeln('total ${await printDataSize(dir, dataSizeType)}');
 
+  var dateTimeThreshold = subtractMonths(new DateTime.now(), 6);
+
   //Need to calculate column widths
+  var parsedEntities = new List();
   var linkColumn = 0;
   var sizeColumn = 0;
+  var dateTimeDayColumn = 0;
+  var dateTimeYearTimeColumn = 0;
   for (FileSystemEntity entity in dirEntities) {
     var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
-      var entityStat = await entity.stat();
+      var entityDetails = new Map();
+      entityDetails['Name'] = entityName;
+      entityDetails['Type'] = getEntityTypeString(entity);
 
+      var entityStat = await entity.stat();
+      entityDetails['Permissions'] = entityStat.modeString();
+
+      // Link count
       if (entity is Directory) {
-      	var entityCount = await entitiesInDirectory(entity as Directory, allowDotNames);
-      	var entityCountWidth = entityCount.toString().length;
-      	if (entityCountWidth > linkColumn) {
-	      linkColumn = entityCountWidth;
-	    }
-      } else if (linkColumn == 0) {
-      	linkColumn = 1;
+        var entityCount = await entitiesInDirectory(entity, allowDotNames);
+        entityDetails['LinkCount'] = entityCount;
+
+        var entityCountWidth = entityCount.toString().length;
+        if (entityCountWidth > linkColumn) {
+          linkColumn = entityCountWidth;
+        }
+      } else {
+        entityDetails['LinkCount'] = 1;
+
+        if (linkColumn == 0) {
+          linkColumn = 1;
+        }
       }
 
+      // Size
+      entityDetails['Size'] = entityStat.size;
       var sizeWidth = entityStat.size.toString().length;
       if (sizeWidth > sizeColumn) {
-      	sizeColumn = sizeWidth;
+        sizeColumn = sizeWidth;
       }
+
+      // Date/Time
+      entityDetails['ModifiedMonth'] = _monthStrings[entityStat.modified.month];
+      entityDetails['ModifiedDay'] = entityStat.modified.day.toString();
+      if (entityStat.modified.isBefore(dateTimeThreshold)) {
+        entityDetails['ModifiedYearTime'] = entityStat.modified.year.toString();
+      } else {
+        var hour = entityStat.modified.hour.toString();
+        var minute = entityStat.modified.minute.toString();
+        entityDetails['ModifiedYearTime'] = '${leftPadString(hour, 2, 2, paddingChar:0x30)}:${leftPadString(minute, 2, 2, paddingChar:0x30)}';
+      }
+      if (entityDetails['ModifiedDay'].length > dateTimeDayColumn) {
+        dateTimeDayColumn = entityDetails['ModifiedDay'].length;
+      }
+      if (entityDetails['ModifiedYearTime'].length > dateTimeYearTimeColumn) {
+        dateTimeYearTimeColumn = entityDetails['ModifiedYearTime'].length;
+      }
+
+      parsedEntities.add(entityDetails);
     }
   }
 
   // Write actual file strings
-  for (FileSystemEntity entity in dirEntities) {
-    var entityName = getFileSystemEntitiyName(entity, allowDotNames);
-
-    if (entityName.isNotEmpty) {
-      var entityStat = await entity.stat();
-
-      var linkCount = 0;
-      if (entity is Directory) {
-      	linkCount = await entitiesInDirectory(entity as Directory, allowDotNames);
-      } else {
-      	linkCount = 1;
-      }
-
-      stdout.write('${getEntityTypeString(entity)}${entityStat.modeString()}. '); //Permissions //TODO: the '.' at the end can mean something. Docs don't say very well
-      stdout.write('${leftPadString(linkCount.toString(), linkColumn, consoleWidthInChars)} '); //Link count
-      //TODO: owner
-      //TODO: group
-      stdout.write('${leftPadString(printDataSizeFromEntity(entityStat, dataSizeType), sizeColumn, consoleWidthInChars)} '); //Size
-      //TODO: date and time
-      stdout.writeln(entityName);
-    }
+  for (Map entityDetails in parsedEntities) {
+    stdout.write("${entityDetails['Type']}${entityDetails['Permissions']}. "); //Permissions //TODO: the '.' at the end can mean something. Docs don't say very well what it could be
+    stdout.write('${leftPadString(entityDetails['LinkCount'].toString(), linkColumn, consoleWidthInChars)} '); //Link count
+    //TODO: owner (Dart does not have a way to get this)
+    //TODO: group (Dart does not have a way to get this)
+    stdout.write("${leftPadString(printDataSizeFromEntity(entityDetails['Size'], dataSizeType), sizeColumn, consoleWidthInChars)} "); //Size
+    stdout.write("${entityDetails['ModifiedMonth']} ${leftPadString(entityDetails['ModifiedDay'], dateTimeDayColumn, consoleWidthInChars)} ${leftPadString(entityDetails['ModifiedYearTime'], dateTimeYearTimeColumn, consoleWidthInChars)} "); //Date/Time
+    stdout.writeln(entityDetails['Name']);
   }
 }
 
