@@ -74,7 +74,7 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
       }
       writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames, dataSizeType);
     } else {
-      writeTabulatedEntities(dirEntitiesList, consoleWidthInChars, allowDotNames);
+      writeTabulatedEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames);
     }
   } else {
     stderr.writeln('ls: cannot access ${dir.path}: No such file or directory');
@@ -188,6 +188,16 @@ DateTime subtractMonths(DateTime dateTime, int months) {
   return dateTime;
 }
 
+String getDesiredEntityName(Directory dir, FileSystemEntity entity, String realName) {
+  if (entity.path == dir.path) {
+    return '.';
+  } else if (entity.path == dir.parent.path) {
+    return '..';
+  } else {
+  	return realName;
+  }
+}
+
 // ----- Long Format -----
 
 void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames, int dataSizeType) async {
@@ -205,14 +215,8 @@ void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, nu
     var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
-      if (entity.path == dir.path) {
-        entityName = '.';
-      } else if (entity.path == dir.parent.path) {
-        entityName = '..';
-      }
-
       var entityDetails = new Map();
-      entityDetails['Name'] = entityName;
+      entityDetails['Name'] = getDesiredEntityName(dir, entity, entityName);
       entityDetails['Type'] = getEntityTypeString(entity);
 
       var entityStat = await entity.stat();
@@ -278,7 +282,7 @@ void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, nu
 // ------ Tabulated ------
 
 //TODO: suddenly, this no longer appears to be writing in columns?
-void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
+void writeTabulatedEntities(Directory dir, List<FileSystemEntity> dirEntities, num consoleWidthInChars, bool allowDotNames) {
   var wroteNewline = false;
   var columnIndex = 0;
   var columnWidths = calculateColumnWidths(dirEntities, consoleWidthInChars, allowDotNames);
@@ -291,6 +295,7 @@ void writeTabulatedEntities(List<FileSystemEntity> dirEntities, num consoleWidth
     if (entityName.isNotEmpty) {
       wroteNewline = false;
 
+      entityName = getDesiredEntityName(dir, entity, entityName);
       var paddedEntity = rightPadString(entityName, columnWidths[columnIndex++], consoleWidthInChars);
       stdout.write(paddedEntity);
 
