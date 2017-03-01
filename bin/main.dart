@@ -2,12 +2,15 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 
-import 'replay_stream.dart';
-
 const int _dataSizeBytes = 1;
 const int _dataSizeHuman = 2;
 
 const _monthStrings = const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const _argumentAll = 'a';
+const _argumentAllExceptHidden = 'A';
+const _argumentLongFormat = 'l';
+const _argumentHumanSizes = 'h';
 
 // Initial structure at this point based off https://www.dartlang.org/tutorials/dart-vm/cmdline
 // While 'ls' was chosen prior to looking at docs, a "dumb" version is defined https://www.dartlang.org/guides/libraries/library-tour#dartio---io-for-command-line-apps (Listing files in a directory)
@@ -15,13 +18,12 @@ const _monthStrings = const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'A
 void main(List<String> args) {
   exitCode = 0;
   final parser = new ArgParser()
-      ..addFlag('a', abbr: 'a')
-      ..addFlag('A', abbr: 'A')
-      ..addFlag('l', abbr: 'l')
-      ..addFlag('h', abbr: 'h');
+      ..addFlag(_argumentAll, abbr: _argumentAll)
+      ..addFlag(_argumentAllExceptHidden, abbr: _argumentAllExceptHidden)
+      ..addFlag(_argumentLongFormat, abbr: _argumentLongFormat)
+      ..addFlag(_argumentHumanSizes, abbr: _argumentHumanSizes);
   //TODO: need some better way to handle these options as "args" doesn't allow naming something without using it as an argument (AKA: the name 'a' can be used --a or -a when it should ONLY be -a, and is referenced 'a')
 
-  //TODO: figure out what to do if terminalColumns is resized
   var consoleWidthInChars = stdout.terminalColumns;
 
   var parsedArgs = parser.parse(args);
@@ -34,7 +36,21 @@ void main(List<String> args) {
     dir = new Directory(files[0]);
   }
 
+  // Dart's IO gets screwy if Directories aren't absolute
+  if (!dir.isAbsolute) {
+  	dir = new Directory(fixAbsolutePath(dir.absolute.path));
+  }
+
   processArgumentsAndRun(dir, parsedArgs, consoleWidthInChars);
+}
+
+String fixAbsolutePath(String path) {
+  var pathUri = new Uri.file(path);
+  var cleanPath = pathUri.toFilePath();
+  if (cleanPath[cleanPath.length - 1] == (Platform.isWindows ? '\\' : '/')) { // Extra '\' or '/' at the end screws up everything...
+  	return cleanPath.substring(0, cleanPath.length - 1);
+  }
+  return cleanPath;
 }
 
 Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleWidthInChars) async {
@@ -42,18 +58,18 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
     var dirEntities = dir.list();
     var dirEntitiesList = await dirEntities.toList();
 
-    if (!parsedArgs['A'] && parsedArgs['a']) {
-      dirEntitiesList.insert(0, dir); //TODO: figure out how, for specified directories, to get their representation as a '.'
-      if (dir.parent != dir) {
-        dirEntitiesList.insert(1, dir.parent); //TODO: building on top of ^^, how do we get this represented by ..? (Currently it seems to just print out '.' regardless of what dir is)
+    if (!parsedArgs[_argumentAllExceptHidden] && parsedArgs[_argumentAll]) {
+      dirEntitiesList.insert(0, dir);
+      if (dir.parent.path != dir.path) {
+        dirEntitiesList.insert(1, dir.parent);
       }
     }
     //TODO: alphabetize list, ignoring the '.', though . and .. come first
 
-    var allowDotNames = parsedArgs['A'] || parsedArgs['a'];
-    if (parsedArgs['l']) {
+    var allowDotNames = parsedArgs[_argumentAllExceptHidden] || parsedArgs[_argumentAll];
+    if (parsedArgs[_argumentLongFormat]) {
       var dataSizeType = _dataSizeBytes;
-      if (parsedArgs['h']) {
+      if (parsedArgs[_argumentHumanSizes]) {
         dataSizeType = _dataSizeHuman;
       }
       writeLongFormEntities(dir, dirEntitiesList, consoleWidthInChars, allowDotNames, dataSizeType);
@@ -189,6 +205,12 @@ void writeLongFormEntities(Directory dir, List<FileSystemEntity> dirEntities, nu
     var entityName = getFileSystemEntitiyName(entity, allowDotNames);
 
     if (entityName.isNotEmpty) {
+      if (entity.path == dir.path) {
+        entityName = '.';
+      } else if (entity.path == dir.parent.path) {
+        entityName = '..';
+      }
+
       var entityDetails = new Map();
       entityDetails['Name'] = entityName;
       entityDetails['Type'] = getEntityTypeString(entity);
