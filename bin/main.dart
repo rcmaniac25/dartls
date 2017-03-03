@@ -58,15 +58,26 @@ Future processArgumentsAndRun(Directory dir, ArgResults parsedArgs, num consoleW
     var dirEntities = dir.list();
     var dirEntitiesList = await dirEntities.toList();
 
+    var allowDotNames = parsedArgs[_argumentAllExceptHidden] || parsedArgs[_argumentAll];
+    dirEntitiesList.sort((a, b) {
+      var aName = getFileSystemEntitiyName(a, allowDotNames).toLowerCase();
+      if (aName.isNotEmpty && aName[0] == '.') {
+      	aName = aName.substring(1);
+      }
+      var bName = getFileSystemEntitiyName(b, allowDotNames).toLowerCase();
+      if (bName.isNotEmpty && bName[0] == '.') {
+      	bName = bName.substring(1);
+      }
+      return aName.compareTo(bName);
+    });
+
     if (!parsedArgs[_argumentAllExceptHidden] && parsedArgs[_argumentAll]) {
       dirEntitiesList.insert(0, dir);
       if (dir.parent.path != dir.path) {
         dirEntitiesList.insert(1, dir.parent);
       }
     }
-    //TODO: alphabetize list, ignoring the '.', though . and .. come first
 
-    var allowDotNames = parsedArgs[_argumentAllExceptHidden] || parsedArgs[_argumentAll];
     if (parsedArgs[_argumentLongFormat]) {
       var dataSizeType = _dataSizeBytes;
       if (parsedArgs[_argumentHumanSizes]) {
@@ -326,7 +337,7 @@ List<int> calculateColumnWidths(List<FileSystemEntity> dirEntities, num consoleW
       }
 
       // Space between chars unless it will make the padded string wrap to the next line
-      var space = (totalLength + entityLength + 1) > consoleWidthInChars ? 0 : 1;
+      var space = (totalLength + entityLength + 2) > consoleWidthInChars ? 0 : 2;
       columns.add(entityLength + space);
       totalLength += entityLength + space;
 
